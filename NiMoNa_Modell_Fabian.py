@@ -104,6 +104,7 @@ def plot(f, N):
     animation = camera.animate()
     animation.save(f'{f.__name__}.gif', writer='PillowWriter', fps=3)
 
+#make sure len(x)==N
 plot(wheel, N)
 plot(star, N)
 plot(circle, N)
