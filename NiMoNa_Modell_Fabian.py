@@ -57,7 +57,7 @@ def enlarge_matrix(A):
     #takes matrix of any shape as input and returns adj. matrix with one row and one columns of zeros added
     B = np.ones([0,A.shape[1]+1])
     for row in A:
-        B = np.append(B, [np.append(row, 0)], 0)
+        B = np.append(B, [np.append(row, 0)], axis=0)
     B = np.append(B, [np.zeros(A.shape[1]+1)], 0)
     return B
 
@@ -84,8 +84,7 @@ def add_followers(A, i, n):
     return A
 
 def influencer_network(N, m):
-    #create network of n connected agents with m followers,
-    #where m is of type int (adding m followers to each agent) or list of len(N) of ints (adding m[i] followers to agent i)
+    #create network of N connected agents with m followers, where m is of type int (adding m followers to each agent) or list of len(N) of ints (adding m[i] followers to agent i)
     A = mesh(N)
     for i in range(N):
         if isinstance(m, int):
@@ -117,12 +116,12 @@ def rk4(f, t, x, h, par):
     return h*ck_sum
 
 #count disregarded steps in Fehlberg method
-dis_steps = 0
+dis_steps = 0 #warum bringt es mir nichts, hier bereits dis_steps als global zu definieren und dann in def plot() einfach zu nutzen?
 
 #runge-kutta-fehlberg (4/5)
 def rkf45(f, t, x, h, par):
     global dis_steps
-    eps_tol = 1e-7
+    eps_tol = 1e-8
     safety = 0.9
     a = np.array([0.0, 1.0/4.0, 3.0/8.0, 12.0/13.0, 1.0, 1.0/2.0])
     b = np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -139,7 +138,7 @@ def rkf45(f, t, x, h, par):
     for i in range(6):
         k = np.append(k, [k_i(i+1, f, t, x, h, a, b, par)], 0)
         err += cerr[i]*k[i]
-    err = h*np.absolute(err).max() #richtig? untersch. Ausasgen dazu, ob h mit multipliziert werden muss
+    err = h*np.absolute(err).max()
     if err > eps_tol:
         dis_steps += 1
         h_new = safety * h * (eps_tol/err)**0.25
@@ -171,7 +170,7 @@ def rhs(t,x,par):
 #Plotting
 
 def plot(f, par, *N):
-    global dis_steps
+    global dis_steps 
     used_steps = 0
     print(f"Now plotting {f.__name__}.")    
     if f.__name__ == "influencer_network":
@@ -187,10 +186,10 @@ def plot(f, par, *N):
     xs = (np.random.uniform(size=(m))-0.5)*2
     par.append(A)
     #define other parameters:
-    t_span = [0,7]
-    t, x = t_span[0], xs
-    h = 0.01#initial stepsize
-    h_max = 0.7
+    t_null = 0
+    t, x = t_null, xs
+    h = 0.01 #initial stepsize
+    h_max = 15
     # now get plot-positions
     rows, cols = np.where(A == 1.)
     edges = zip(rows.tolist(), cols.tolist())
@@ -199,29 +198,42 @@ def plot(f, par, *N):
     plot_positions = nx.drawing.spring_layout(gr)  
     # and create a colorbar
     vmin = -1
-    vmax = 1
+    vmax =  1
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
     cmap = plt.get_cmap('coolwarm')
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     fig = plt.figure()
     camera = Camera(fig)
+    max_steps = 500
+    h_reached = 0 
+    plt.ion()
     while h <= h_max:
+        if h > h_reached:
+            h_reached = h
         nx.draw(gr, pos=plot_positions, node_size=500, node_color=x, cmap='coolwarm', vmin=vmin, vmax=vmax)
+        plt.title(f"{h:1.3f}")
+        plt.pause(0.00001)
         camera.snap()
 #        t, x = t + h, x + rk4(rhs, t, x, h, par)
-        rk_step_x = rkf45(rhs, t, x, h, par)[0]
-        h_new = rkf45(rhs, t, x, h, par)[1]
-        h = h_new
+        rk_step_x, h_new = rkf45(rhs, t, x, h, par)
         t, x = t + h, x + rk_step_x
+        h = h_new
         used_steps += 1
+        print(x[0])
+        if used_steps > max_steps:
+            print(f"I used more than {max_steps} steps and right now h = {h}")
+            print(x)
+            break
+    print(f"highes h: {h_reached}")
     plt.colorbar(sm)
     animation = camera.animate()
     animation.save(f'{f.__name__}.gif', writer='PillowWriter', fps=10)
-    par.pop()
+    par.pop() #Warum brauche ich das?
     print(f"Disregarded {dis_steps} steps. Used {used_steps} steps.")
     dis_steps = 0
     print(f"Saved {f.__name__}.gif")
+    return None
 
 
 #*******************************************************
@@ -229,16 +241,15 @@ def plot(f, par, *N):
 # Number of nodes
 N = 13
 #parameters in order d, u, alpha, gamma, b
-params = [1,0.31,1.2,-1.3,0]
-
+params = [1,0.31,1.2,1.3,0]
 
 #*******************************************************
 #Let the fun begin
-plot(wheel, params, N)
-plot(star, params, N)
-plot(circle, params, N)
+#plot(wheel, params, N)
+#plot(star, params, N)
+#plot(circle, params, N)
 plot(mesh, params, N)
 #change N and introduce m for plotting influencer network
 N = 3
 m = [4,5,6]
-plot(influencer_network, params, N, m)
+#plot(influencer_network, params, N, m)
