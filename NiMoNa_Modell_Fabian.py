@@ -187,8 +187,8 @@ def plot(f, par, *N):
     xs = (np.random.uniform(size=(m))-0.5)*2
     par.append(A)
     #define other parameters:
-    t_span = [0,7]
-    t, x = t_span[0], xs
+    t_null = 0
+    t, x = t_null, xs
     h = 0.01#initial stepsize
     h_max = 0.7
     # now get plot-positions
@@ -206,6 +206,7 @@ def plot(f, par, *N):
     sm.set_array([])
     fig = plt.figure()
     camera = Camera(fig)
+    max_steps = 500
     while h <= h_max:
         nx.draw(gr, pos=plot_positions, node_size=500, node_color=x, cmap='coolwarm', vmin=vmin, vmax=vmax)
         camera.snap()
@@ -215,6 +216,9 @@ def plot(f, par, *N):
         h = h_new
         t, x = t + h, x + rk_step_x
         used_steps += 1
+        if used_steps > max_steps:
+            print(f"I stopped plotting because I used more than {max_steps} steps and right now h = {h}")
+            break
     plt.colorbar(sm)
     animation = camera.animate()
     animation.save(f'{f.__name__}.gif', writer='PillowWriter', fps=10)
