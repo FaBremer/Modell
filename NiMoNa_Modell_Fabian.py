@@ -118,7 +118,7 @@ def add_rand_branches(A, low, high):
           NOTE: if low = high = n, then n branches will be added to each node
     Returns
     -------
-    A : chenged adjacency matrix
+    A : changed adjacency matrix
 
     """
     A_copy = A
