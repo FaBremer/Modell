@@ -100,8 +100,27 @@ def influencer_network(N, m):
 
 #*************
 # Random Tree Topology
-# dont want the numbers of branches to be random? Let low = high
 def add_rand_branches(A, low, high):
+    """
+    Adds a (random) number of branches to an existing tree. New branches will 
+    only be added to a node, if that node is only connected with one other 
+    node (so if it is on the outside of the tree). The random number can be 
+    bounded and therefore also fixed on a not random int by setting low=high
+
+    Parameters
+    ----------
+    A :   Adjacency matrix of network that the branches shall be added to
+    low : lowest possible integer for the random choice of added branches to 
+          each node
+    high :highest possible integer for the random choice of added branches to 
+          each node 
+          
+          NOTE: if low = high = n, then n branches will be added to each node
+    Returns
+    -------
+    A : chenged adjacency matrix
+
+    """
     A_copy = A
     counter = 0
     for row in A_copy:
@@ -112,6 +131,24 @@ def add_rand_branches(A, low, high):
     return A
 
 def tree(depth, low, high):
+    """
+    Creates a tree topology with the "depth" being the number of nodes 
+    counting from the central node and going the longest path to end of tree
+    (length of all paths is identical if low >0)
+
+    Parameters
+    ----------
+    depth : integer, depth as defined above 
+    low :   integer "low" that is passed to add_rand_branches function (see
+            docstring there)
+    high :  integer "high" that is passed to add_rand_branches function (see
+            docstring there)
+
+    Returns
+    -------
+    A : adjacency matrix for tree topology
+
+    """
     A = np.zeros([1, 1])
     for _ in range(depth):
         A = add_rand_branches(A, low, high)
