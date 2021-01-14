@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Jan  9 21:56:08 2021
-
 @author: Fabian Bremer
 """
 
@@ -12,7 +11,33 @@ import matplotlib as mpl
 import networkx as nx
 
 #*******************************************************
-#Topologies
+#Matrix transformation functions
+
+def enlarge_matrix(A):
+    #takes matrix of any shape as input and returns adj. matrix with one row and one columns of zeros added
+    B = np.zeros([A.shape[0]+1, A.shape[1]+1])
+    B[:-1, :-1] = A
+    return B
+
+def enlarge_matrix_N(A, n):
+    #enlarge given matrix by n rows and columns of zeros
+    for i in range(n):
+        A = enlarge_matrix(A)
+    return A
+
+def make_connection(A, id1, id2):
+    A[id1][id2] = 1
+    A[id2][id1] = 1
+    return A
+
+def delete_connection(A, id1, id2):
+    A[id1][id2] = 0
+    A[id2][id1] = 0
+    return A
+
+#*******************************************************
+#simple topologies
+
 def circle(N):
     A = np.zeros((N, N))
     for i in range(N-1):
@@ -51,36 +76,15 @@ def mesh(N):
     return A
 
 #*******************************************************
-#Matrix transformation functions
-
-def enlarge_matrix(A):
-    #takes matrix of any shape as input and returns adj. matrix with one row and one columns of zeros added
-    B = np.ones([0,A.shape[1]+1])
-    for row in A:
-        B = np.append(B, [np.append(row, 0)], 0)
-    B = np.append(B, [np.zeros(A.shape[1]+1)], 0)
-    return B
-
-def enlarge_matrix_N(A, n):
-    #enlarge given matrix by n rows and columns of zeros
-    for i in range(n):
-        A = enlarge_matrix(A)
-    return A
-
-def make_connection(A, id1, id2):
-    A[id1][id2] = 1
-    A[id2][id1] = 1
-
-def delete_connection(A, id1, id2):
-    A[id1][id2] = 0
-    A[id2][id1] = 0
-
+#a little more complicated networks / topologies and functions to create them
+#*************
+#Influencer Network
 def add_followers(A, i, n):
     #adds n followers (star topology) of agent i to adj. matrix A and returns new adj. matrix
     old_n = A.shape[1]
     A = enlarge_matrix_N(A, n)
     for j in range(n):
-        make_connection(A, i, old_n+j)
+        A = make_connection(A, i, old_n+j)
     return A
 
 def influencer_network(N, m):
@@ -92,6 +96,25 @@ def influencer_network(N, m):
             A = add_followers(A, i, m)
         else:
             A = add_followers(A, i, m[i])            
+    return A
+
+#*************
+# Random Tree Topology
+# dont want the numbers of branches to be random? Let low = high
+def add_rand_branches(A, low, high):
+    A_copy = A
+    counter = 0
+    for row in A_copy:
+        if np.sum(row) < 2:
+            n = np.random.randint(low=low, high=high+1)
+            A = add_followers(A, counter, n)
+        counter += 1
+    return A
+
+def tree(depth, low, high):
+    A = np.zeros([1, 1])
+    for _ in range(depth):
+        A = add_rand_branches(A, low, high)
     return A
 
 #*******************************************************
@@ -116,7 +139,7 @@ def rk4(f, t, x, h, par):
         ck_sum += c[i]*k_i(i+1, f, t, x, h, a, b, par)
     return h*ck_sum
 
-#count disregarded steps in Fehlberg method
+#count discarded steps in Fehlberg method
 dis_steps = 0
 
 #runge-kutta-fehlberg (4/5)
@@ -139,7 +162,7 @@ def rkf45(f, t, x, h, par):
     for i in range(6):
         k = np.append(k, [k_i(i+1, f, t, x, h, a, b, par)], 0)
         err += cerr[i]*k[i]
-    err = h*np.absolute(err).max() #richtig? untersch. Ausasgen dazu, ob h mit multipliziert werden muss
+    err = h*np.absolute(err).max() 
     if err > eps_tol:
         dis_steps += 1
         h_new = safety * h * (eps_tol/err)**0.25
@@ -176,21 +199,19 @@ def plot(f, par, *N):
     print(f"Now plotting {f.__name__}.")    
     if f.__name__ == "influencer_network":
         A = f(N[0], N[1])
-        if isinstance(N[1], int):
-            m = N[0]+N[0]*N[1]
-        else:
-            m = N[0]+sum(N[1])
+    elif f.__name__ == "tree":
+        A = f(N[0], N[1], N[2])
     else:
-        m = N[0]
-        A = f(m)
-    # Initialize N nodes randomly, with opinions centered around 0
+        A = f(N[0])
+    m = A.shape[0]
+    # Initialize m nodes randomly, with opinions centered around 0
     xs = (np.random.uniform(size=(m))-0.5)*2
     par.append(A)
     #define other parameters:
     t_null = 0
     t, x = t_null, xs
-    h = 0.01#initial stepsize
-    h_max = 0.7
+    h = 0.01 #initial stepsize
+    h_max = 1.1 # for higher h_max the plots stop converging, esp. mesh
     # now get plot-positions
     rows, cols = np.where(A == 1.)
     edges = zip(rows.tolist(), cols.tolist())
@@ -206,31 +227,30 @@ def plot(f, par, *N):
     sm.set_array([])
     fig = plt.figure()
     camera = Camera(fig)
-    max_steps = 500
+    max_steps = 500 #max number of steps in solver method, that will be taken
     while h <= h_max:
         nx.draw(gr, pos=plot_positions, node_size=500, node_color=x, cmap='coolwarm', vmin=vmin, vmax=vmax)
         camera.snap()
-#        t, x = t + h, x + rk4(rhs, t, x, h, par)
-        rk_step_x = rkf45(rhs, t, x, h, par)[0]
-        h_new = rkf45(rhs, t, x, h, par)[1]
-        h = h_new
+        rk_step_x, h_new = rkf45(rhs, t, x, h, par)
         t, x = t + h, x + rk_step_x
+        h = h_new
         used_steps += 1
         if used_steps > max_steps:
-            print(f"I stopped plotting because I used more than {max_steps} steps and right now h = {h}")
+            print(f"Stopped plotting because more than {max_steps} steps were used. This should not happen.")
             break
     plt.colorbar(sm)
     animation = camera.animate()
     animation.save(f'{f.__name__}.gif', writer='PillowWriter', fps=10)
     par.pop()
-    print(f"Disregarded {dis_steps} steps. Used {used_steps} steps.")
+    print(f"Discarded {dis_steps} steps. Used {used_steps} steps.")
     dis_steps = 0
     print(f"Saved {f.__name__}.gif")
+    return None
 
 
 #*******************************************************
 #Initial Data
-# Number of nodes
+# Number of agents
 N = 13
 #parameters in order d, u, alpha, gamma, b
 params = [1,0.31,1.2,-1.3,0]
@@ -238,11 +258,15 @@ params = [1,0.31,1.2,-1.3,0]
 
 #*******************************************************
 #Let the fun begin
-plot(wheel, params, N)
-plot(star, params, N)
-plot(circle, params, N)
-plot(mesh, params, N)
+#plot(wheel, params, N)
+#plot(star, params, N)
+#plot(circle, params, N)
+#plot(mesh, params, N)
 #change N and introduce m for plotting influencer network
 N = 3
 m = [4,5,6]
-plot(influencer_network, params, N, m)
+#plot(influencer_network, params, N, m)
+#introduce low and high for tree network. See explanation in tree function above.
+low = 2
+high = 2
+plot(tree, params, N, low, high)
