@@ -14,23 +14,76 @@ import networkx as nx
 #Matrix transformation functions
 
 def enlarge_matrix(A):
-    #takes matrix of any shape as input and returns adj. matrix with one row and one columns of zeros added
+    """
+    takes matrix of any shape as input and returns adj. matrix with one row 
+    and one columns of zeros added
+
+    Parameters
+    ----------
+    A : np.array (matrix) - input adjacency matrix
+
+    Returns
+    -------
+    B : np.array (matrix) - enlarged adjacency matrix
+
+    """
     B = np.zeros([A.shape[0]+1, A.shape[1]+1])
     B[:-1, :-1] = A
     return B
 
 def enlarge_matrix_N(A, n):
-    #enlarge given matrix by n rows and columns of zeros
+    """
+    enlarges given matrix by n rows and columns of zeros
+
+    Parameters
+    ----------
+    A : np.array (matrix) - input adjacency matrix
+    n : integer - number of rows and columns A will be enlarged by
+
+    Returns
+    -------
+    A : np.array (matrix) - enlarged adjacency matrix
+
+    """
     for i in range(n):
         A = enlarge_matrix(A)
     return A
 
 def make_connection(A, id1, id2):
+    """
+    makes a connection betwween two agents in an adjacency matrix
+
+    Parameters
+    ----------
+    A :   np.array (matrix) - input adjacency matrix
+    id1 : integer - ID of one of the agents in A that is going to be connected
+    id2 : integer - ID of the other agent in A that is going to be connected
+
+    Returns
+    -------
+    A : np.array (matrix) - changed adjacency matrix
+    """
     A[id1][id2] = 1
     A[id2][id1] = 1
     return A
 
 def delete_connection(A, id1, id2):
+    
+    """
+    deletes a connection betwween two agents in an adjacency matrix
+
+    Parameters
+    ----------
+    A :     np.array (matrix) - input adjacency matrix
+    id1 :   integer - ID of one of the agents in A that is going to be 
+            disconnected
+    id2 :   integer - ID of the other agent in A that is going to be
+            disconnected
+
+    Returns
+    -------
+    A : np.array (matrix) - changed adjacency matrix
+    """
     A[id1][id2] = 0
     A[id2][id1] = 0
     return A
@@ -39,6 +92,17 @@ def delete_connection(A, id1, id2):
 #simple topologies
 
 def circle(N):
+    """
+    Creates NxN adjacency matrix for circle topology
+
+    Parameters
+    ----------
+    N : integer - number of agents in network
+    
+    Returns
+    -------
+    A : np.array (matrix) - adjacency matrix for circle topology
+    """
     A = np.zeros((N, N))
     for i in range(N-1):
         A[i, i+1] = 1
@@ -48,6 +112,17 @@ def circle(N):
     return A
 
 def star(N):
+    """
+    Creates NxN adjacency matrix for star topology
+
+    Parameters
+    ----------
+    N : integer - number of agents in network
+    
+    Returns
+    -------
+    A : np.array (matrix) - adjacency matrix for star topology
+    """
     A = np.zeros((N, N))
     A[0] = np.ones(N)
     for i in range(N):
@@ -57,6 +132,17 @@ def star(N):
     return A
 
 def wheel(N):
+    """
+    Creates NxN adjacency matrix for wheel topology
+
+    Parameters
+    ----------
+    N : integer - number of agents in network
+    
+    Returns
+    -------
+    A : np.array (matrix) - adjacency matrix for wheel topology
+    """
     A = np.zeros((N, N))
     for i in range(N-2):
         A[i, i+1] = 1
@@ -70,6 +156,17 @@ def wheel(N):
     return A
 
 def mesh(N):
+    """
+    Creates NxN adjacency matrix for mesh topology
+
+    Parameters
+    ----------
+    N : integer - number of agents in network
+    
+    Returns
+    -------
+    A : np.array (matrix) - adjacency matrix for mesh topology
+    """
     A = np.ones((N, N))
     for i in range(N):
         A[i, i] = 0
@@ -80,7 +177,20 @@ def mesh(N):
 #*************
 #Influencer Network
 def add_followers(A, i, n):
-    #adds n followers (star topology) of agent i to adj. matrix A and returns new adj. matrix
+    """
+    adds n followers (star topology) of agent i to adj. matrix A and 
+    returns new adj. matrix
+
+    Parameters
+    ----------
+    A : np.array (matrix) - input adjacency matrix
+    i : integer - ID of agent in network that followers shall be added to
+    n : integer - number of followers to be added
+
+    Returns
+    -------
+    A :  np.array (matrix) - adjacency matrix
+    """
     old_n = A.shape[1]
     A = enlarge_matrix_N(A, n)
     for j in range(n):
@@ -88,8 +198,20 @@ def add_followers(A, i, n):
     return A
 
 def influencer_network(N, m):
-    #create network of n connected agents with m followers,
-    #where m is of type int (adding m followers to each agent) or list of len(N) of ints (adding m[i] followers to agent i)
+    """
+    Create network of N connected agents with m followers, where m is of type 
+    int (adding m followers to each agent) or list of len(N) of ints (adding 
+    m[i] followers to agent i)
+
+    Parameters
+    ----------
+    N : Integer - Number of influencers
+    m : Integer or List of Integers - Number of followers for each influencer
+
+    Returns
+    -------
+    A : np.array (matrix) - adjacency matrix
+    """
     A = mesh(N)
     for i in range(N):
         if isinstance(m, int):
@@ -118,7 +240,7 @@ def add_rand_branches(A, low, high):
           NOTE: if low = high = n, then n branches will be added to each node
     Returns
     -------
-    A : changed adjacency matrix
+    A : np.array (matrix) - changed adjacency matrix
 
     """
     A_copy = A
@@ -146,7 +268,7 @@ def tree(depth, low, high):
 
     Returns
     -------
-    A : adjacency matrix for tree topology
+    A : np.array (matrix) - adjacency matrix
 
     """
     A = np.zeros([1, 1])
@@ -158,8 +280,35 @@ def tree(depth, low, high):
 #solvers
 
 def k_i(i,f,t,x,h,a,b,par):
-    #returns k_i function for runge-kutta-methods with a_i as nodes and b_ij runge-kutta-matrix
-    assert i > 0
+    """
+    returns k_i function for Runge-Kutta-methods 
+
+    Parameters
+    ----------
+    i : integer
+        determines which k_i is to be calculated.
+    f : callable
+        the right hand side of the ODE that needs to be solved.
+        It has format f(t,x) where x can be a list of any length
+    t : float
+        time-variable of f(t,x).
+    x : float or list of floats
+        x-varibale of f(t,x).
+    h : float
+        stepsize of timestep.
+    a : np.array (list)
+        vector of nodes in Butcher-tableau for RK-methods
+    b : np.array (matrix)
+        Runge-Kutta-matrix in Butcher tableau
+    par : list
+        parameters needed for f.
+
+    Returns
+    -------
+    float or list of floats, depending on f(t,x)
+        k_i function for Runge-Kutta-methods 
+
+    """
     real_i = i-1
     k_sum = 0
     for j in range(real_i):
@@ -168,6 +317,22 @@ def k_i(i,f,t,x,h,a,b,par):
 
 #runge-kutta (4)
 def rk4(f, t, x, h, par):
+    """
+    calculates one step for the classic Runge-Kutta method (RK4)
+
+    Parameters
+    ----------
+    f :   callable - the right hand side of the ODE that needs to be solved.
+          It has format f(t,x) where x can be a list of any length
+    t :   float - time-variable of f(t,x)
+    x :   float or list of floats - x-varibale of f(t,x)
+    h :   float - stepsize of timestep
+    par : list - other parameters for f
+
+    Returns
+    -------
+    h*ck_sum : for the step x_n+1 = x + h*ck_sum (one step for x in RK4)
+    """
     a = np.array([0, 0.5, 0.5, 1])
     b = np.array([[0, 0, 0, 0], [0.5, 0, 0, 0], [0, 0.5, 0, 0], [0, 0, 1, 0]])
     c = np.array([1.0/6.0, 1.0/3.0, 1.0/3.0, 1.0/6.0])
@@ -181,6 +346,24 @@ dis_steps = 0
 
 #runge-kutta-fehlberg (4/5)
 def rkf45(f, t, x, h, par):
+    """
+    calculates one step for the Runge-Kutta-Fehlberg method (RKF 45) while 
+    counting discarded steps
+
+    Parameters
+    ----------
+    f :   callable - the right hand side of the ODE that needs to be solved.
+          It has format f(t,x) where x can be a vector / a list of any length
+    t :   float - time-variable of f(t,x)
+    x :   float or list of floats - x-varibale of f(t,x)
+    h :   float - stepsize of timestep
+    par : list - other parameters for f
+
+    Returns
+    -------
+    h*ck_sum : for the step x_n+1 = x + h*ck_sum (one step for x in RK4)
+    h_new    : new stepsize for next step
+    """
     global dis_steps
     eps_tol = 1e-7
     safety = 0.9
@@ -214,13 +397,32 @@ def rkf45(f, t, x, h, par):
 #*******************************************************
 #right hand side of ODE
 def rhs(t,x,par):
+    """
+    right hand side of ODE - see https://arxiv.org/abs/2009.13600
+
+    Parameters
+    ----------
+    t :   not used in this particular ODE, kept for comparability 
+    x :   np.array - list of states of opinion of the agents in the network
+    par : list - list of parameters used in this model, which are:
+          d -     > 0, resistance to becoming opinionated for each agent
+          u -     > 0, attention to social influence of each agent
+          alpha - > 0, self-reinforcement of opinion
+          gamma - cooperative agents (gamma > 0) give rise to agreement, while
+                  competitive agents (gamma < 0) give rise to disagreement
+          b -     bias or additive input
+          A -     adjacency matrix representing network structure
+    Returns
+    -------
+    result : np.array - right hand side of ODE
+    """
     d = par[0]
     u = par[1]
     alpha = par[2]
     gamma = par[3]
     b = par[4]
-    mat_a = par[5]
-    sum_vec = np.matmul(mat_a, x)
+    A = par[5]
+    sum_vec = np.matmul(A, x)
     result = np.zeros(len(x))
     for i in range(len(x)):
         #if d, u or b are vectors of length len(x), add [i] to line below
@@ -231,6 +433,20 @@ def rhs(t,x,par):
 #Plotting
 
 def plot(f, par, *N):
+    """
+    Plotting function for this particular problem
+
+    Parameters
+    ----------
+    f :   callable - function that determines network topology
+    par : list - list of parameters needed by rhs of ODE
+    *N :  information about size of network topology, needed by f
+    
+    Returns
+    -------
+    None.
+
+    """
     global dis_steps
     used_steps = 0
     print(f"Now plotting {f.__name__}.")    
