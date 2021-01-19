@@ -500,26 +500,310 @@ def plot(f, par, *N):
     print(f"Saved {f.__name__}.gif")
     return None
 
-
 #*******************************************************
+#Plotting simple networks
 #Initial Data
 # Number of agents
-N = 13
+#N = 13
 #parameters in order d, u, alpha, gamma, b
-params = [1,0.31,1.2,-1.3,0]
-
-
-#*******************************************************
+#params = [1,0.31,1.2,-1.3,0]
+#***********
 #Let the fun begin
 #plot(wheel, params, N)
 #plot(star, params, N)
 #plot(circle, params, N)
 #plot(mesh, params, N)
 #change N and introduce m for plotting influencer network
-N = 3
-m = [4,5,6]
+#N = 3
+#m = [4,5,6]
 #plot(influencer_network, params, N, m)
 #introduce low and high for tree network. See explanation in tree function above.
-low = 2
-high = 2
-plot(tree, params, N, low, high)
+#low = 2
+#high = 2
+#plot(tree, params, N, low, high)
+
+#*******************************************************
+#Plotting more realistic influencer networks (rin)
+#edited rhs and plotfunction:
+#NOTE: various variations of the rhs will be used in the following. No further
+#docstrings will be provided. For documentation, see docstring of rhs() above
+
+
+def plot_rin(f, f_2, par, *N):
+    """
+    Plotting function for realistic influencer network.
+
+    Parameters
+    ----------
+    f :   callable - function that determines network topology
+    f_2:  callable - rhs that is going to be used
+    par : list - list of parameters needed by rhs of ODE
+    *N :  information about size of network topology, needed by f
+    
+    Returns
+    -------
+    None.
+
+    """
+    global dis_steps
+    global plot_counter
+    global node_size
+    used_steps = 0
+    print(f"Now plotting realistic influencer network no. {plot_counter+1}.")    
+    A = f(N[0], N[1])
+    # Initialize all nodes randomly, with opinions centered around 0
+    xs = (np.random.uniform(size=(A.shape[0]))-0.5)*2
+    #change opinion of influencers to strong opinion
+    for i in range(N[0]):
+        if i >= N[0]//2:
+            xs[i] = 2
+        else:
+            xs[i] = -2
+    par.append(A)
+    #define other parameters:
+    t_null = 0
+    t, x = t_null, xs
+    h = 0.01 #initial stepsize
+    h_max = 3
+    # now get plot-positions
+    rows, cols = np.where(A == 1.)
+    edges = zip(rows.tolist(), cols.tolist())
+    gr = nx.Graph()
+    gr.add_edges_from(edges)
+    plot_positions = nx.drawing.spring_layout(gr)  
+    # and create a colorbar
+    vmin = -1
+    vmax = 1
+    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = plt.get_cmap('coolwarm')
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    fig = plt.figure()
+    camera = Camera(fig)
+    max_steps = 500 #max number of steps in solver method, that will be taken
+    while h <= h_max:
+        nx.draw(gr, pos=plot_positions, node_size=node_size, node_color=x, cmap='coolwarm', vmin=vmin, vmax=vmax) #ADJUST NODE SIZE HIERE FOR LARGER NETWORKS
+        camera.snap()
+        rk_step_x, h_new = rkf45(f_2, t, x, h, par)
+        t, x = t + h, x + rk_step_x
+        h = h_new
+        used_steps += 1
+        if used_steps > max_steps:
+            print(f"Stopped plotting because more than {max_steps} steps were used. This should not happen.")
+            break
+    plt.colorbar(sm)
+    animation = camera.animate()
+    plot_counter += 1
+    animation.save(f'realistic_{f.__name__}_{plot_counter}.gif', writer='PillowWriter', fps=10)
+    par.pop()
+    print(f"Discarded {dis_steps} steps. Used {used_steps} steps.")
+    dis_steps = 0
+    print(f"Saved realistic_{f.__name__}_{plot_counter}.gif")
+    return None
+
+
+plot_counter = 0 #for filenaming purposes
+#first plot
+#use old rhs
+def rhs_rin_1(t,x,par):
+    d = par[0]
+    u = par[1]
+    alpha = par[2]
+    gamma = par[3]
+    b = par[4]
+    A = par[5]
+    sum_vec = np.matmul(A, x)
+    result = np.zeros(len(x))
+    for i in range(len(x)):
+        result[i] = -d*x[i]+u*np.tanh(alpha*x[i]+gamma*sum_vec[i])+b
+    return result
+
+node_size = 30
+#start out with 2 Influencers and 100 followers each
+N_1 = 2
+m_1 = 100
+params = [1,0.31,1.2,1.3,0]
+plot_rin(influencer_network, rhs_rin_1, params, N_1, m_1)
+
+wait = input("Press Enter to continue.")
+
+#second plot
+#NOW: give rhs a list of u_is instead of a single u as in: make the social
+#influence different for followers and influencers
+def rhs_rin_2(t,x,par):
+    d = par[0]
+    u = par[1]
+    alpha = par[2]
+    gamma = par[3]
+    b = par[4]
+    A = par[5]
+    sum_vec = np.matmul(A, x)
+    result = np.zeros(len(x))
+    for i in range(len(x)):
+        result[i] = -d*x[i]+u[i]*np.tanh(alpha*x[i]+gamma*sum_vec[i])+b
+    return result
+
+node_size = 30
+N_2 = 2
+m_2 = 100
+u_inf = 0.001
+u_fol = 0.7
+my_u = np.zeros(influencer_network(N_2, m_2).shape[0])
+my_u[:N_2] = u_inf
+my_u[N_2:] = u_fol
+params = [1,my_u,1.2,1.3,0]
+plot_rin(influencer_network, rhs_rin_2, params, N_2, m_2)
+
+wait = input("Press Enter to continue.")
+
+#third plot
+#NOW: give rhs a list of b_is instead of a single b as in: make the additive 
+#input (bias) different for followers and influencers
+def rhs_rin_3(t,x,par):
+    global N_3
+    d = par[0]
+    u = par[1]
+    alpha = par[2]
+    gamma = par[3]
+    b = par[4]
+    for j in range(N_3):
+        b[j] = x[j]
+    A = par[5]
+    sum_vec = np.matmul(A, x)
+    result = np.zeros(len(x))
+    for i in range(len(x)):
+        result[i] = -d*x[i]+u[i]*np.tanh(alpha*x[i]+gamma*sum_vec[i])+b[i]
+    return result
+
+node_size = 30
+N_3 = 2
+m_3 = 100
+u_inf = 0.001
+u_fol = 0.7
+my_u = np.zeros(influencer_network(N_3, m_3).shape[0])
+my_u[:N_3] = u_inf
+my_u[N_3:] = u_fol
+my_b = np.zeros(influencer_network(N_3, m_3).shape[0])
+
+params = [1,my_u,1.2,1.3,my_b]
+plot_rin(influencer_network, rhs_rin_3, params, N_3, m_3)
+
+wait = input("Press Enter to continue.")
+
+#fourth plot
+#NOW: make that bias a little more realistic as in: the influencers interact
+
+def rhs_rin_4(t,x,par):
+    global N_4
+    global infl_perc
+    d = par[0]
+    u = par[1]
+    alpha = par[2]
+    gamma = par[3]
+    b = par[4]
+    b[:N_4] = (np.sum(x[:N_4])/N_4)*infl_perc
+    A = par[5]
+    sum_vec = np.matmul(A, x)
+    result = np.zeros(len(x))
+    for i in range(len(x)):
+        result[i] = -d*x[i]+u[i]*np.tanh(alpha*x[i]+gamma*sum_vec[i])+b[i]
+    return result
+
+node_size = 30
+infl_perc = 0.6
+N_4 = 5
+m_4 = 50
+u_inf = 0.1
+u_fol = 0.7
+my_u = np.zeros(influencer_network(N_4, m_4).shape[0])
+my_u[:N_4] = u_inf
+my_u[N_4:] = u_fol
+my_b = np.zeros(influencer_network(N_4, m_4).shape[0])
+
+params = [1,my_u,1.2,1.3,my_b]
+plot_rin(influencer_network, rhs_rin_4, params, N_4, m_4)
+
+infl_perc = 0.9
+plot_rin(influencer_network, rhs_rin_4, params, N_4, m_4)
+
+wait = input("Press Enter to continue.")
+
+#fifth plot
+#NOW: change bias of followers
+
+def rhs_rin_5(t,x,par):
+    global N_5
+    global infl_perc
+    global fol_perc
+    d = par[0]
+    u = par[1]
+    alpha = par[2]
+    gamma = par[3]
+    b = par[4]
+    b[:N_5] = (np.sum(x[:N_5])/N_5)*infl_perc
+    for j in range(N_5):
+        b[N_5+j*((len(b)-N_5)//N_5):] = x[j]*fol_perc
+    A = par[5]
+    sum_vec = np.matmul(A, x)
+    result = np.zeros(len(x))
+    for i in range(len(x)):
+        result[i] = -d*x[i]+u[i]*np.tanh(alpha*x[i]+gamma*sum_vec[i])+b[i]
+    return result
+
+node_size = 30
+infl_perc = 0.7
+fol_perc = 0.2
+u_inf = 0.1
+u_fol = 0.35
+N_5 = 3
+m_5 = 100
+my_u = np.zeros(influencer_network(N_5, m_5).shape[0])
+my_u[:N_5] = u_inf
+my_u[N_5:] = u_fol
+my_b = np.zeros(influencer_network(N_5, m_5).shape[0])
+
+params = [1,my_u,1.2,1.3,my_b]
+
+plot_rin(influencer_network, rhs_rin_5, params, N_5, m_5)
+wait = input("Press Enter to continue.")
+
+
+#sixth plot
+#NOW: let influencers be aware of no. of followers of other influencers
+
+def rhs_rin_6(t,x,par):
+    global N_6
+    global m_6
+    global infl_perc
+    global fol_perc
+    d = par[0]
+    u = par[1]
+    alpha = par[2]
+    gamma = par[3]
+    b = par[4]
+    k=0
+    b[:N_6] = (np.sum((x[:N_6]*m_6))/(np.sum(m_6)))*infl_perc
+    for j in range(N_6):
+        b[N_6+k:] = x[j]*fol_perc
+        k = np.sum(m_6[:j+1])
+    A = par[5]
+    sum_vec = np.matmul(A, x)
+    result = np.zeros(len(x))
+    for i in range(len(x)):
+        result[i] = -d*x[i]+u[i]*np.tanh(alpha*x[i]+gamma*sum_vec[i])+b[i]
+    return result
+
+node_size = 30
+infl_perc = 0.7
+fol_perc = 0.2
+u_inf = 0.1
+u_fol = 0.35
+N_6 = 3
+m_6 = [100,50,10]
+my_u = np.zeros(influencer_network(N_6, m_6).shape[0])
+my_u[:N_6] = u_inf
+my_u[N_6:] = u_fol
+my_b = np.zeros(influencer_network(N_6, m_6).shape[0])
+
+params = [1,my_u,1.2,1.3,my_b]
+plot_rin(influencer_network, rhs_rin_6, params, N_6, m_6)
