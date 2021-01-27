@@ -9,6 +9,26 @@ import matplotlib.pyplot as plt
 from celluloid import Camera
 import matplotlib as mpl
 import networkx as nx
+import random
+
+
+def decision(probability):
+    """
+    returns Returns TRUE with a probability of input, FALSE otherwise
+
+    Parameters
+    ----------
+    probability : float
+        Should be in interval [0,1] and represents probability for the
+        function to return TRUE.
+
+    Returns
+    -------
+    boolean
+        True with probability probability, False otherwise.
+
+    """
+    return random.random() < probability
 
 #*******************************************************
 #Matrix transformation functions
@@ -107,8 +127,7 @@ def circle(N):
     for i in range(N-1):
         A[i, i+1] = 1
         A[i+1, i] = 1
-    A[N-1, 0] = 1
-    A[0, N-1] = 1
+    A = make_connection(A, 0, N-1)
     return A
 
 def star(N):
@@ -276,8 +295,72 @@ def tree(depth, low, high):
         A = add_rand_branches(A, low, high)
     return A
 
+def small_world_network(N, k=2):
+    """
+    Creates small world network as in https://www.nature.com/articles/30918
+    
+    Parameters
+    ----------
+    N : integer
+        Number of nodes.
+    k : integer
+        Number of neighbours to which each node is connected on each side.
+        The default is 2.
+
+    Returns
+    -------
+    A : np.array (matrix)
+        Adjacency matrix for such a network.
+
+    """    
+    A = circle(N)
+    for i in range(N):
+        for j in range(2,k+1):
+            A = make_connection(A, i, i-(j+2))
+    return A
+
+def small_world_network_with_rand(N, p, k=2):
+    """
+    Creates small world network as in https://www.nature.com/articles/30918
+    
+    Parameters
+    ----------
+    N : integer
+        Number of nodes.
+    p : float
+        propability for randomization (see paper above)
+    k : integer
+        Number of neighbours to which each node is initially connected on each 
+        side. The default is 2.
+
+    Returns
+    -------
+    A : np.array (matrix)
+        Adjacency matrix for such a network.
+
+    """
+    B = small_world_network(N, k)
+    for j in range(k):
+        for i in range(N):
+            rand_agent = random.randint(0, N-1)
+            while ((rand_agent == i) or (B[rand_agent][i] == 1)):
+                rand_agent = random.randint(0, N-1)
+            if decision(p):
+                B = delete_connection(B, i-(j+1), i)
+                B = make_connection(B, rand_agent, i)
+    return B
+
 #*******************************************************
 #solvers
+
+def k_i2(i,f,t,x,h,a,b,par,k):
+    
+    
+    
+    k_sum = 0
+    for j in range(i-1):
+        k_sum += b[i-1][j]*k_i(j+1,f,t,x,h,a,b,par)
+    return f(t + h*a[i-1], x + h*k_sum, par)
 
 def k_i(i,f,t,x,h,a,b,par):
     """
@@ -450,7 +533,7 @@ def plot(f, par, *N):
     global dis_steps
     used_steps = 0
     print(f"Now plotting {f.__name__}.")    
-    if f.__name__ == "influencer_network":
+    if f.__name__ == "influencer_network" or f.__name__ == "small_world_network_with_rand":
         A = f(N[0], N[1])
     elif f.__name__ == "tree":
         A = f(N[0], N[1], N[2])
@@ -470,7 +553,11 @@ def plot(f, par, *N):
     edges = zip(rows.tolist(), cols.tolist())
     gr = nx.Graph()
     gr.add_edges_from(edges)
-    plot_positions = nx.drawing.spring_layout(gr)  
+    if f.__name__ == "small_world_network_with_rand":
+        plot_positions = nx.circular_layout(gr)
+    else:
+        plot_positions = nx.spring_layout(gr)
+    plot_positions = nx.circular_layout(gr)
     # and create a colorbar
     vmin = -1
     vmax = 1
@@ -481,8 +568,17 @@ def plot(f, par, *N):
     fig = plt.figure()
     camera = Camera(fig)
     max_steps = 500 #max number of steps in solver method, that will be taken
+    labels={}
+    for i in range(m):
+        labels[i] = f"{i}"
+    #print(gr.nodes())
+    reordered_dict = {k: plot_positions[k] for k in sorted(gr.nodes())}
+    plot_positions = reordered_dict
+    #print(reordered_dict)
+    #print(plot_positions)
     while h <= h_max:
         nx.draw(gr, pos=plot_positions, node_size=500, node_color=x, cmap='coolwarm', vmin=vmin, vmax=vmax)
+        nx.draw_networkx_labels(gr, plot_positions, labels)
         camera.snap()
         rk_step_x, h_new = rkf45(rhs, t, x, h, par)
         t, x = t + h, x + rk_step_x
@@ -522,15 +618,178 @@ def plot(f, par, *N):
 #high = 2
 #plot(tree, params, N, low, high)
 
+N = 20
+p = 0.9
+params = [1,0.31,1.2,-1.3,0]
+
+#plot(small_world_network, params, N)
+plot(circle, params, N)
+#plot(small_world_network_with_rand, params, N, p)
+
+"""
+NOW: PLOTTING REALISTIC INFLUENCER NETWORK (RIN)
+"""
+#change old plot function to plot realistic influencer network (rin)
+
+def plot_rin(f, par, *N):
+    """
+    Plotting function for this particular problem
+
+    Parameters
+    ----------
+    f :   callable - function that determines network topology
+    par : list - list of parameters needed by rhs of ODE
+    *N :  information about size of network topology, needed by f
+    
+    Returns
+    -------
+    None.
+
+    """
+    global dis_steps
+    used_steps = 0
+    print(f"Now plotting realistic_{f.__name__}.")    
+    A = f(N[0], N[1])
+    m = A.shape[0]
+    if len(N) > 2:
+        node_size = N[2]
+    else:
+        node_size = 500
+    # Initialize m nodes randomly, with opinions centered around 0
+    xs = (np.random.uniform(size=(m))-0.5)*2
+    #change opinion of influencers to strong opinion
+    for i in range(N[0]):
+        if i >= N[0]//2:
+            xs[i] = 2
+        else:
+            xs[i] = -2
+    par.append(A)
+    #define other parameters:
+    t_null = 0
+    t, x = t_null, xs
+    h = 0.01 #initial stepsize
+    h_max = 5 
+    # now get plot-positions
+    rows, cols = np.where(A == 1.)
+    edges = zip(rows.tolist(), cols.tolist())
+    gr = nx.Graph()
+    gr.add_edges_from(edges)
+    plot_positions = nx.drawing.spring_layout(gr)  
+    # and create a colorbar
+    vmin = -1
+    vmax = 1
+    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = plt.get_cmap('coolwarm')
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    fig = plt.figure()
+    camera = Camera(fig)
+    max_steps = 500 #max number of steps in solver method, that will be taken
+    while h <= h_max:
+        nx.draw(gr, pos=plot_positions, node_size=node_size, node_color=x, cmap='coolwarm', vmin=vmin, vmax=vmax)
+        camera.snap()
+        rk_step_x, h_new = rkf45(rhs_rin, t, x, h, par)
+        t, x = t + h, x + rk_step_x
+        h = h_new
+        used_steps += 1
+        if used_steps > max_steps:
+            print(f"Stopped plotting because more than {max_steps} steps were used. This should not happen.")
+            break
+    plt.colorbar(sm)
+    animation = camera.animate()
+    animation.save(f'realistic_{f.__name__}.gif', writer='PillowWriter', fps=10)
+    par.pop()
+    print(f"Discarded {dis_steps} steps. Used {used_steps} steps.")
+    dis_steps = 0
+    print(f"Saved realistic_{f.__name__}.gif")
+    return None
+
+def rhs_rin(t,x,par):
+    """
+    right hand side of ODE - see https://arxiv.org/abs/2009.13600
+
+    Parameters
+    ----------
+    t :   not used in this particular ODE, kept for comparability 
+    x :   np.array - list of states of opinion of the agents in the network
+    par : list - list of parameters used in this model, which are:
+          d -     > 0, resistance to becoming opinionated for each agent
+          u -     > 0, attention to social influence of each agent
+          alpha - > 0, self-reinforcement of opinion
+          gamma - cooperative agents (gamma > 0) give rise to agreement, while
+                  competitive agents (gamma < 0) give rise to disagreement
+          b -     bias or additive input
+          A -     adjacency matrix representing network structure
+    Returns
+    -------
+    result : np.array - right hand side of ODE
+    """
+    d = par[0]
+    u = par[1]
+    alpha = par[2]
+    gamma = par[3]
+    b = par[4]
+    A = par[5]
+    sum_vec = np.matmul(A, x)
+    result = np.zeros(len(x))
+    for i in range(len(x)):
+        result[i] = -d[i]*x[i]+u[i]*np.tanh(alpha[i]*x[i]+gamma[i]*sum_vec[i])+b
+    return result
+
+N = 3
+m = [100,50,40]
+matrix_size = influencer_network(N, m).shape[0]
+
+d_inf, d_fol = 0.15, 0.3
+my_d = np.zeros(matrix_size)
+my_d[:N], my_d[N:] = d_inf, d_fol
+
+u_inf, u_fol = 0.01, 0.35
+my_u = np.zeros(matrix_size)
+my_u[:N], my_u[N:] = u_inf, u_fol
+    
+alpha_inf, alpha_fol = 2.5, 0.3
+my_alpha = np.zeros(matrix_size)
+my_alpha[:N], my_alpha[N:] = alpha_inf, alpha_fol
+    
+gamma_inf, gamma_fol = 1.5, 1.5
+my_gamma = np.zeros(matrix_size)
+my_gamma[:N], my_gamma[N:] = gamma_inf, gamma_fol
+    
+params = [my_d,my_u,my_alpha,my_gamma,0]
+
+node_size = np.ones(N+np.sum(m))
+node_size[:N] = 150
+node_size[N:] = 50
+
+#plot_rin(influencer_network, params, N, m, node_size)
+
+
+
+
+
+
+
+
+"""
+
+DISCARDED PART OF PROJECT:
+    
+    The following part has been discarded, because it generates "correct" 
+    results by wrongly twisting the modellparameters. To emulate realistic
+    behaviour of influencer networks mainly the parameter b - bias - was 
+    changed. However in the model this represents the additive input of
+    influences outside the model, not in the model itself as is used here.
+    This discarded part is kept here for transparency reasons.
+
 #*******************************************************
 #Plotting more realistic influencer networks (rin)
 #edited rhs and plotfunction:
 #NOTE: various variations of the rhs will be used in the following. No further
 #docstrings will be provided. For documentation, see docstring of rhs() above
 
-
 def plot_rin(f, f_2, par, *N):
-    """
+
     Plotting function for realistic influencer network.
 
     Parameters
@@ -544,7 +803,6 @@ def plot_rin(f, f_2, par, *N):
     -------
     None.
 
-    """
     global dis_steps
     global plot_counter
     global node_size
@@ -651,7 +909,7 @@ u_fol = 0.7
 my_u = np.zeros(influencer_network(N_2, m_2).shape[0])
 my_u[:N_2] = u_inf
 my_u[N_2:] = u_fol
-params = [1,my_u,1.2,1.3,0]
+params = [0.1,my_u,1.2,1.3,0]
 plot_rin(influencer_network, rhs_rin_2, params, N_2, m_2)
 
 wait = input("Press Enter to continue.")
@@ -807,3 +1065,4 @@ my_b = np.zeros(influencer_network(N_6, m_6).shape[0])
 
 params = [1,my_u,1.2,1.3,my_b]
 plot_rin(influencer_network, rhs_rin_6, params, N_6, m_6)
+"""
