@@ -127,8 +127,10 @@ def circle(N):
     for i in range(N-1):
         A[i, i+1] = 1
         A[i+1, i] = 1
-    A = make_connection(A, 0, N-1)
+    A[0, N-1] = 1
+    A[N-1, 0] = 1
     return A
+
 
 def star(N):
     """
@@ -315,7 +317,7 @@ def small_world_network(N, k=2):
     """    
     A = circle(N)
     for i in range(N):
-        for j in range(2,k+1):
+        for j in range(k-1):
             A = make_connection(A, i, i-(j+2))
     return A
 
@@ -354,13 +356,24 @@ def small_world_network_with_rand(N, p, k=2):
 #solvers
 
 def k_i2(i,f,t,x,h,a,b,par,k):
-    
-    
-    
-    k_sum = 0
-    for j in range(i-1):
-        k_sum += b[i-1][j]*k_i(j+1,f,t,x,h,a,b,par)
+    """
+    WORK IN PROGRESS - NOT DONE YET
+    if len(k) == 0:
+        return f(t, x)
+    else:
+        k_sum = 0
+        for j in range(len(k)):
+            k_sum += b[i-1][j]*k[j]
     return f(t + h*a[i-1], x + h*k_sum, par)
+        real_i = i-1
+    if len(k) == 0:
+        return f(t, x)
+    else:  
+        k_sum = 0
+        for j in range(real_i):
+            k_sum += b[real_i][j]*k[j]
+        return f(t + h*a[real_i], x + h*k_sum, par)
+    """
 
 def k_i(i,f,t,x,h,a,b,par):
     """
@@ -548,17 +561,19 @@ def plot(f, par, *N):
     t, x = t_null, xs
     h = 0.01 #initial stepsize
     h_max = 1.1 # for higher h_max the plots stop converging, esp. mesh
-    # now get plot-positions
+    # now get plot-positions 
     rows, cols = np.where(A == 1.)
     edges = zip(rows.tolist(), cols.tolist())
     gr = nx.Graph()
     gr.add_edges_from(edges)
     if f.__name__ == "small_world_network_with_rand":
         plot_positions = nx.circular_layout(gr)
+        new_dict = dict(zip(sorted(gr.nodes()),plot_positions.values()))
+        plot_positions = new_dict
     else:
         plot_positions = nx.spring_layout(gr)
-    plot_positions = nx.circular_layout(gr)
     # and create a colorbar
+    gr.add_edge(0, N[0]-1)
     vmin = -1
     vmax = 1
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
@@ -568,17 +583,14 @@ def plot(f, par, *N):
     fig = plt.figure()
     camera = Camera(fig)
     max_steps = 500 #max number of steps in solver method, that will be taken
+    """
     labels={}
     for i in range(m):
         labels[i] = f"{i}"
-    #print(gr.nodes())
-    reordered_dict = {k: plot_positions[k] for k in sorted(gr.nodes())}
-    plot_positions = reordered_dict
-    #print(reordered_dict)
-    #print(plot_positions)
+    """
     while h <= h_max:
         nx.draw(gr, pos=plot_positions, node_size=500, node_color=x, cmap='coolwarm', vmin=vmin, vmax=vmax)
-        nx.draw_networkx_labels(gr, plot_positions, labels)
+        #nx.draw_networkx_labels(gr, plot_positions, labels)
         camera.snap()
         rk_step_x, h_new = rkf45(rhs, t, x, h, par)
         t, x = t + h, x + rk_step_x
@@ -619,12 +631,12 @@ def plot(f, par, *N):
 #plot(tree, params, N, low, high)
 
 N = 20
-p = 0.9
+p = 0
 params = [1,0.31,1.2,-1.3,0]
 
-#plot(small_world_network, params, N)
-plot(circle, params, N)
-#plot(small_world_network_with_rand, params, N, p)
+plot(small_world_network, params, N)
+#plot(circle, params, N)
+plot(small_world_network_with_rand, params, N, p)
 
 """
 NOW: PLOTTING REALISTIC INFLUENCER NETWORK (RIN)
