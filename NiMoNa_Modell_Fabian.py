@@ -297,10 +297,45 @@ def tree(depth, low, high):
         A = add_rand_branches(A, low, high)
     return A
 
+def connect_networks(*A):
+    """
+    connects different networks together via their first agent
+
+    Parameters
+    ----------
+    *A : tuple of np.arrays (matrices)
+        networks to be linked together.
+
+    Returns
+    -------
+    B : np.array (matrix)
+        connected network.
+
+    """
+    
+    n_list = []
+    inf_IDs = [0]
+    for net in A:
+        n_list.append(net.shape[0])
+        inf_IDs.append(np.sum(n_list))
+    inf_IDs.pop()
+    n = np.sum(n_list)
+    B = np.zeros([n,n])
+    k = 0
+    for i in range(len(A)):
+        B[k:k+n_list[i], k:k+n_list[i]] = A[i]
+        k += n_list[i]
+    for inf_ID in inf_IDs:
+        for j in range(len(inf_IDs)):
+            if inf_IDs[j] == inf_ID:
+                continue
+            else:
+                B = make_connection(B, inf_IDs[j], inf_ID)
+    return B, inf_IDs
+
 def small_world_network(N, k=2):
     """
     Creates small world network as in https://www.nature.com/articles/30918
-    
     Parameters
     ----------
     N : integer
@@ -308,13 +343,12 @@ def small_world_network(N, k=2):
     k : integer
         Number of neighbours to which each node is connected on each side.
         The default is 2.
-
     Returns
     -------
     A : np.array (matrix)
         Adjacency matrix for such a network.
-
-    """    
+    """
+    
     A = circle(N)
     for i in range(N):
         for j in range(k-1):
@@ -355,25 +389,80 @@ def small_world_network_with_rand(N, p, k=2):
 #*******************************************************
 #solvers
 
-def k_i2(i,f,t,x,h,a,b,par,k):
+def k_i2(i,f,t,x,h,a,b,par):
     """
-    WORK IN PROGRESS - NOT DONE YET
-    if len(k) == 0:
-        return f(t, x)
-    else:
-        k_sum = 0
-        for j in range(len(k)):
-            k_sum += b[i-1][j]*k[j]
-    return f(t + h*a[i-1], x + h*k_sum, par)
-        real_i = i-1
-    if len(k) == 0:
-        return f(t, x)
-    else:  
-        k_sum = 0
-        for j in range(real_i):
-            k_sum += b[real_i][j]*k[j]
-        return f(t + h*a[real_i], x + h*k_sum, par)
+    The better version of k_i (see below). To see difference in implementation,
+    compare rk4, where k_i is implemented and rkf45, where k_i2 is implemented.
+    Instead of rk4 and r_i the betteer versions rkf45
+
+    Parameters
+    ----------
+    i : integer
+        determines which k_i is to be calculated.
+    f : callable
+        the right hand side of the ODE that needs to be solved.
+        It has format f(t,x) where x can be a list of any length
+    t : float
+        time-variable of f(t,x).
+    x : float or list of floats
+        x-varibale of f(t,x).
+    h : float
+        stepsize of timestep.
+    a : np.array (list)
+        vector of nodes in Butcher-tableau for RK-methods
+    b : np.array (matrix)
+        Runge-Kutta-matrix in Butcher tableau
+    par : list
+        parameters needed for f.
+
+    Returns
+    -------
+    k_list : list
+        list of k_i functions for Runge-Kutta-methdos.
     """
+    k_list = [] 
+    for j in range(i):
+        a_j = a[j]
+        b_j = b[j]
+        res = k_step(f, t, x, h, a_j, b_j, par, k_list)
+        k_list.append(res)
+        #k_sum += b[i-1][j]*k_i(j+1,f,t,x,h,a,b,par)
+    return k_list
+
+def k_step(f,t,x,h,a,b,par,k):
+    """
+    calculates next k-function for Runge-Kutta-methods, given the already 
+    calculated k-functions
+
+    Parameters
+    ----------
+    f : callable
+        the right hand side of the ODE that needs to be solved.
+        It has format f(t,x) where x can be a list of any length
+    t : float
+        time-variable of f(t,x).
+    x : float or list of floats
+        x-varibale of f(t,x).
+    h : float
+        stepsize of timestep.
+    a : np.array (list)
+        vector of nodes in Butcher-tableau for RK-methods
+    b : np.array (list)
+        row of Runge-Kutta-matrix in Butcher tableau
+    par : list
+        parameters needed for f.
+    k : list
+        list of previously calculated k-functions.
+
+    Returns
+    -------
+    float or list of floats, depending on f(t,x)
+        k_i function for Runge-Kutta-methods 
+    """
+    bk_sum = 0
+    for i in range(len(k)):
+        bk_sum += b[i]*k[i]
+    return f(t+h*a, x+h*bk_sum, par)
 
 def k_i(i,f,t,x,h,a,b,par):
     """
@@ -411,7 +500,8 @@ def k_i(i,f,t,x,h,a,b,par):
         k_sum += b[real_i][j]*k_i(j+1,f,t,x,h,a,b,par)
     return f(t + h*a[real_i], x + h*k_sum, par)
 
-#runge-kutta (4)
+#runge-kutta (4) - not used in code, left for documentation. For better version
+#use Runge-Kutta-Fehlberg method (see rkf45 below)
 def rk4(f, t, x, h, par):
     """
     calculates one step for the classic Runge-Kutta method (RK4)
@@ -474,9 +564,8 @@ def rkf45(f, t, x, h, par):
     c_star = np.array([16.0/135.0, 0.0, 6656.0/12825.0, 28561.0/56430.0, (-9.0)/50.0, 2.0/55.0]) # coefficients for 5th order method
     cerr = c - c_star
     err = 0
-    k = np.ones([0,len(x)])
+    k = k_i2(len(cerr), f, t, x, h, a, b, par) #
     for i in range(6):
-        k = np.append(k, [k_i(i+1, f, t, x, h, a, b, par)], 0)
         err += cerr[i]*k[i]
     err = h*np.absolute(err).max() 
     if err > eps_tol:
@@ -568,6 +657,7 @@ def plot(f, par, *N):
     gr.add_edges_from(edges)
     if f.__name__ == "small_world_network_with_rand":
         plot_positions = nx.circular_layout(gr)
+        print(plot_positions)
         new_dict = dict(zip(sorted(gr.nodes()),plot_positions.values()))
         plot_positions = new_dict
     else:
@@ -631,12 +721,12 @@ def plot(f, par, *N):
 #plot(tree, params, N, low, high)
 
 N = 20
-p = 0
+p = 0.8
 params = [1,0.31,1.2,-1.3,0]
 
-plot(small_world_network, params, N)
-#plot(circle, params, N)
-plot(small_world_network_with_rand, params, N, p)
+#plot(small_world_network, params, N)
+#plot(circle, params, 3)
+#plot(small_world_network_with_rand, params, N, p)
 
 """
 NOW: PLOTTING REALISTIC INFLUENCER NETWORK (RIN)
@@ -716,6 +806,51 @@ def plot_rin(f, par, *N):
     print(f"Saved realistic_{f.__name__}.gif")
     return None
 
+def plot_rin_2(A, f, xs, par, *N):
+    global dis_steps
+    used_steps = 0
+    print(f"Now plotting realistic_{f.__name__}.")    
+    node_size = N[2]
+    par.append(A)
+    #define other parameters:
+    t_null = 0
+    t, x = t_null, xs
+    h = 0.01 #initial stepsize
+    h_max = 5 
+    # now get plot-positions
+    rows, cols = np.where(A == 1.)
+    edges = zip(rows.tolist(), cols.tolist())
+    gr = nx.Graph()
+    gr.add_edges_from(edges)
+    plot_positions = nx.drawing.spring_layout(gr)  
+    # and create a colorbar
+    vmin = -1
+    vmax = 1
+    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = plt.get_cmap('coolwarm')
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    fig = plt.figure()
+    camera = Camera(fig)
+    max_steps = 500 #max number of steps in solver method, that will be taken
+    while h <= h_max:
+        nx.draw(gr, pos=plot_positions, node_size=node_size, node_color=x, cmap='coolwarm', vmin=vmin, vmax=vmax)
+        camera.snap()
+        rk_step_x, h_new = rkf45(rhs_rin, t, x, h, par)
+        t, x = t + h, x + rk_step_x
+        h = h_new
+        used_steps += 1
+        if used_steps > max_steps:
+            print(f"Stopped plotting because more than {max_steps} steps were used. This should not happen.")
+            break
+    plt.colorbar(sm)
+    animation = camera.animate()
+    animation.save(f'realistic_{f.__name__}.gif', writer='PillowWriter', fps=10)
+    par.pop()
+    print(f"Discarded {dis_steps} steps. Used {used_steps} steps.")
+    dis_steps = 0
+    print(f"Saved realistic_{f.__name__}.gif")
+    return None
 def rhs_rin(t,x,par):
     """
     right hand side of ODE - see https://arxiv.org/abs/2009.13600
@@ -749,35 +884,56 @@ def rhs_rin(t,x,par):
     return result
 
 N = 3
-m = [100,50,40]
-matrix_size = influencer_network(N, m).shape[0]
+m = [60,50,70]
+
+H = influencer_network(1, m[0])
+I = influencer_network(1, m[1])
+J = influencer_network(1, m[2])
+
+A, ids = connect_networks(H,I,J)
+
+matrix_size = A.shape[0]
 
 d_inf, d_fol = 0.15, 0.3
 my_d = np.zeros(matrix_size)
-my_d[:N], my_d[N:] = d_inf, d_fol
+my_d[:] = d_fol
 
 u_inf, u_fol = 0.01, 0.35
 my_u = np.zeros(matrix_size)
-my_u[:N], my_u[N:] = u_inf, u_fol
+my_u[:] = u_fol
     
-alpha_inf, alpha_fol = 2.5, 0.3
+alpha_fol =  0.3
 my_alpha = np.zeros(matrix_size)
-my_alpha[:N], my_alpha[N:] = alpha_inf, alpha_fol
+my_alpha[:] = alpha_fol
     
 gamma_inf, gamma_fol = 1.5, 1.5
 my_gamma = np.zeros(matrix_size)
-my_gamma[:N], my_gamma[N:] = gamma_inf, gamma_fol
-    
-params = [my_d,my_u,my_alpha,my_gamma,0]
+my_gamma[:] = gamma_fol
 
 node_size = np.ones(N+np.sum(m))
-node_size[:N] = 150
-node_size[N:] = 50
+node_size[:] = 50
 
-#plot_rin(influencer_network, params, N, m, node_size)
+# Initialize m nodes randomly, with opinions centered around 0
+xs = (np.random.uniform(size=(matrix_size))-0.5)*0.2
 
 
+node_size[0] = 300
+my_d[0] = d_inf
+my_u[0] = u_inf
+my_gamma[0] = gamma_inf
+xs[0] = -3
+my_alpha[0] = 10 * (m[0]/np.sum(m))
+for h in range(1,len(m)):
+    node_size[m[0]+h] = 300
+    xs[m[0]+h] = 3
+    my_d[m[0]+h] = d_inf
+    my_gamma[m[0]+h] = gamma_inf
+    my_u[m[0]+h] = u_inf
+    my_alpha[m[0]+h] = 5 * (m[h]/np.sum(m))
 
+params = [my_d,my_u,my_alpha,my_gamma,0]
+
+plot_rin_2(A, influencer_network, xs, params, N, m, node_size)
 
 
 
@@ -1077,4 +1233,5 @@ my_b = np.zeros(influencer_network(N_6, m_6).shape[0])
 
 params = [1,my_u,1.2,1.3,my_b]
 plot_rin(influencer_network, rhs_rin_6, params, N_6, m_6)
+
 """
